@@ -1,0 +1,41 @@
+# Define parameters for the VM
+param (
+    [string]$SubscriptionId,
+    [string]$ResourceGroupName,
+    [string]$ResourceNamePrefix,
+    [string]$VmSize = "Standard_D2s_v3",
+    [string]$AdminUsername = "adminuser",
+    [string]$AdminPassword = "P@ssw0rd123!", # Ensure you meet password policy
+    [string]$ImagePublisher = "Canonical",
+    [string]$ImageOffer = "UbuntuServer",
+    [string]$ImageSku = "18.04-LTS",
+    [string]$Location = "eastus"
+)
+
+# Generate unique names for resources
+$VmName = "$ResourceNamePrefix-VM"
+$NsgName = "$ResourceNamePrefix-NSG"
+$NicName = "$ResourceNamePrefix-NIC"
+$IpName = "$ResourceNamePrefix-IP"
+$VnetName = "$ResourceNamePrefix-VNet"
+$SubnetName = "default"
+$OsDiskName = "$ResourceNamePrefix-OSDisk"
+
+# Create a virtual network and subnet
+$vnet = New-AzVirtualNetwork -ResourceGroupName $ResourceGroupName -Location $Location -Name $VnetName -AddressPrefix "10.0.0.0/16"
+$vnet = Add-AzVirtualNetworkSubnetConfig -Name $SubnetName -AddressPrefix "10.0.0.0/24" -VirtualNetwork $vnet | Set-AzVirtualNetwork
+
+# Create a network security group (NSG)
+$nsg = New-AzNetworkSecurityGroup -ResourceGroupName $ResourceGroupName -Location $Location -Name $NsgName
+
+# Create a network interface card (NIC)
+$nic = New-AzNetworkInterface -Name $NicName -ResourceGroupName $ResourceGroupName -Location $Location -SubnetId $vnet.Subnets[0].Id -NetworkSecurityGroupId $nsg.Id
+
+# Configure the VM
+$vmConfig = New-AzVMConfig -VMName $VmName -VMSize $VmSize
+$vmConfig = Set-AzVMOperatingSystem -VM $vmConfig -Linux -ComputerName $VmName -Credential (New-Object System.Management.Automation.PSCredential ($AdminUsername, (ConvertTo-SecureString $AdminPassword -AsPlainText -Force)))
+$vmConfig = Set-AzVMSourceImage -VM $vmConfig -PublisherName $ImagePublisher -Offer $ImageOffer -Skus $ImageSku -Version "latest"
+$vmConfig = Add-AzVMNetworkInterface -VM $vmConfig -Id $nic.Id
+
+# Create the VM
+New-AzVM -ResourceGroupName $ResourceGroupName -Location $Location -VM $vmConfig
